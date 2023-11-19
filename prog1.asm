@@ -4,18 +4,21 @@
 // évolution de AC par incrément de 200.
 //
 
-define SYSC_EXIT 100
-define SYSC_PUTI 200
+ define SYSC_EXIT            100
+    define SYSC_PUTI            200
+    define SYSC_NEW_THREAD      300
 
+    // *** créer un thread ***
+    sysc SYSC_NEW_THREAD        // créer un thread
+    ifgt pere                   // si (AC > 0), aller à pere 
 
-    set 3000                    // AC = 3000
-loop:                           // définir loop
-    iflt end                    // si (AC < 0) aller à end
-    sub incr                    // AC = AC - mem[ incr ]
-    nop                         // ne rien faire
-    jump loop                   // aller à loop
-end:
-    sysc SYSC_EXIT               // boucle infinie // Appel au,système pour SYSC_EXIT
+    // *** code du fils ***
+    set 1000                    // AC = 1000    
+    sysc SYSC_PUTI              // afficher AC  
+    nop
+    nop  
 
-incr: data 200                  // valeur de l'increment
-
+pere: // *** code du père ***
+    set 2000                    // AC = 2000      
+    sysc SYSC_PUTI              // afficher AC    
+    sysc SYSC_EXIT              // fin du thread  

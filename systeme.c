@@ -45,8 +45,13 @@ int current_thread = -1;    /* nu du thread courant     */
 ***********************************************************/
 
 void new_thread(PSW cpu) {
-    printf("Fonction %s à terminer.\n", __FUNCTION__);
-    exit(EXIT_FAILURE);
+    int i = 0;
+    while(thread[i].state != EMPTY){
+        i++;
+    }
+    thread[i].cpu = cpu;
+    thread[i].state = READY;
+    printf("New thread created : %d\n", i);
 }
 
 
@@ -57,8 +62,19 @@ void new_thread(PSW cpu) {
 ***********************************************************/
 
 void kill_thread(int p) {
-    printf("Fonction %s à terminer.\n", __FUNCTION__);
-    exit(EXIT_FAILURE);
+    thread[p].state = EMPTY;
+    int remaingin_thread = 0;
+    for(int i = 0; i < MAX_THREADS; i++){
+        if(thread[i].state == READY){
+            remaingin_thread++;
+        }
+    }
+    if(remaingin_thread == 0){
+        printf("No more thread to execute, exiting...\n");
+        exit(EXIT_SUCCESS);
+    }
+
+    
 }
 
 
@@ -81,9 +97,16 @@ void wakeup(void) {
 ***********************************************************/
 
 PSW scheduler(PSW cpu) {
-    printf("Fonction scheduler() à terminer.\n");
-    return cpu;
+    //Sauvegarder le thread courant si il existe
+    if(current_thread != -1){
+        thread[current_thread].cpu = cpu;
+    }
+    do{
+        current_thread = (current_thread + 1) % MAX_THREADS;
+    } while(thread[current_thread].state != READY);
+    return thread[current_thread].cpu;
 }
+    
 
 
 /**********************************************************
@@ -113,18 +136,20 @@ PSW system_init(void) {
 enum {
     SYSC_EXIT       = 100,   // fin du thread courant
     SYSC_PUTI       = 200,   // afficher le contenu de AC
+    SYSC_NEW_THREAD = 300,   // créer un nouveau thread
 };
 
 
 PSW sysc_exit(PSW cpu) {
-    printf("Fonction %s à terminer.\n", __FUNCTION__);
-    exit(EXIT_FAILURE);
+    kill_thread(current_thread);
+    printf("Thread stopped :  %d\n", current_thread);
+    exit(EXIT_SUCCESS);
 }
 
 
 PSW sysc_puti(PSW cpu) {
-    printf("Fonction %s à terminer.\n", __FUNCTION__);
-    exit(EXIT_FAILURE);
+    printf("Stocked INT in AC : %d\n", cpu.AC);
+    return cpu;
 }
 
 
@@ -135,8 +160,8 @@ PSW sysc_putc(PSW cpu) {
 
 
 PSW sysc_new_thread(PSW cpu) {
-    printf("Fonction %s à terminer.\n", __FUNCTION__);
-    exit(EXIT_FAILURE);
+    new_thread(cpu);
+    return cpu;
 }
 
 
@@ -187,7 +212,7 @@ PSW process_interrupt(PSW cpu) {
             break;
         case INT_TRACE: 
             dump_cpu(cpu); sleep(1);
-            break;
+            scheduler(cpu);
         case INT_SYSC:
             printf("Appel système\n");
             cpu = system_call(cpu);
