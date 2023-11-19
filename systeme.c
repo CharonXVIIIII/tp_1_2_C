@@ -175,7 +175,6 @@ static PSW system_call(PSW cpu) {
 /**********************************************************
 ** Traitement des interruptions par le système (mode système)
 ***********************************************************/
-//Faites en sorte que le syst`eme indique les num´eros d’interruption re¸cus
 PSW process_interrupt(PSW cpu) {
     switch (cpu.IN) {
         case INT_SEGV:
@@ -186,7 +185,7 @@ PSW process_interrupt(PSW cpu) {
             printf("Erreur: Instruction Invalide\n");
             exit(EXIT_FAILURE);
             break;
-        case INT_TRACE:
+        case INT_TRACE: 
             dump_cpu(cpu); sleep(1);
             break;
         case INT_SYSC:
@@ -194,8 +193,8 @@ PSW process_interrupt(PSW cpu) {
             cpu = system_call(cpu);
             break;
         case INT_KEYBOARD:
-            cpu = sysc_getchar(cpu);
             printf("Interruption clavier\n");
+            exit(EXIT_FAILURE); 
             break;
         default:
             break;

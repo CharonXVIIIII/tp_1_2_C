@@ -4,6 +4,9 @@
 // évolution de AC par incrément de 200.
 //
 
+define SYSC_EXIT 100
+define SYSC_PUTI 200
+
 
     set 3000                    // AC = 3000
 loop:                           // définir loop
@@ -12,7 +15,7 @@ loop:                           // définir loop
     nop                         // ne rien faire
     jump loop                   // aller à loop
 end:
-    jump end                    // boucle infinie
+    sysc SYSC_EXIT               // boucle infinie // Appel au,système pour SYSC_EXIT
 
 incr: data 200                  // valeur de l'increment
 
