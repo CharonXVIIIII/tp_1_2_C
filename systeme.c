@@ -23,6 +23,8 @@
 typedef enum {
     EMPTY =   0,            /* thread non-prêt          */
     READY =   1,            /* thread prêt              */
+    ASLEEP =  2,            /* thread endormi           */
+    GETCHAR = 3,            /* thread en attente de caractère */
 } STATE;                    /* État d'un thread         */
 
 typedef struct {
@@ -33,6 +35,10 @@ typedef struct {
 PCB thread[MAX_THREADS];    /* table des threads        */
 
 int current_thread = -1;    /* nu du thread courant     */
+PSW idle;   
+time_t wake_up_times[MAX_THREADS];     
+char tampon = '\0';
+           
 
 
 /**********************************************************
@@ -85,10 +91,14 @@ void kill_thread(int p) {
 ***********************************************************/
 
 void wakeup(void) {
-    printf("Fonction %s à terminer.\n", __FUNCTION__);
-    exit(EXIT_FAILURE);
+    time_t current_time;
+    time(&current_time);
+    for (int i = 0; i < MAX_THREADS; i++) {
+        if (thread[i].state == ASLEEP && difftime(current_time, wake_up_times[i]) >= 0) {
+            thread[i].state = READY;
+        }
+    }
 }
-
 
 /**********************************************************
 ** Ordonnancer l'exécution des threads.
@@ -97,16 +107,22 @@ void wakeup(void) {
 ***********************************************************/
 
 PSW scheduler(PSW cpu) {
-    //Sauvegarder le thread courant si il existe
-    if(current_thread != -1){
-        thread[current_thread].cpu = cpu;
-    }
-    do{
+    assert(&cpu!=NULL);
+    PCB current_pcb = { .state=READY, .cpu = cpu};
+    thread[current_thread]=current_pcb;
+    do {
         current_thread = (current_thread + 1) % MAX_THREADS;
-    } while(thread[current_thread].state != READY);
+    } while (thread[current_thread].state != READY);
+    printf("thread %d \t ",current_thread);
+
+    // Si aucun processus n'est prêt, renvoyer le thread idle
+    if (thread[current_thread].state != READY) {
+        return idle;
+    }
+
     return thread[current_thread].cpu;
 }
-    
+
 
 
 /**********************************************************
@@ -117,11 +133,14 @@ PSW system_init(void) {
     printf("Booting\n");
     
     /*** création d'un code P1 ***/
-    
+
     // le code (PC) démarre en 20 et le reste est à zéro
     PSW cpu = { .PC = 20 };
-    
+    idle.PC = 120;
+    thread[0].state = READY;
+    thread[1].state = READY;
     assemble(cpu.PC, "prog1.asm");
+    assemble_string(idle.PC, "loop: jump loop");
     
     return cpu;
 }
@@ -137,6 +156,8 @@ enum {
     SYSC_EXIT       = 100,   // fin du thread courant
     SYSC_PUTI       = 200,   // afficher le contenu de AC
     SYSC_NEW_THREAD = 300,   // créer un nouveau thread
+    SYSC_SLEEP      = 400,   // dormir (en millisecondes)
+    SYSC_GETCHAR    = 500,   // lire un caractère au clavier
 };
 
 
@@ -160,21 +181,56 @@ PSW sysc_putc(PSW cpu) {
 
 
 PSW sysc_new_thread(PSW cpu) {
-    new_thread(cpu);
+    PSW child = cpu;
+    child.AC = 0;
+    new_thread(child);
+    for(size_t i = 0; i < MAX_THREADS; i++ ){
+        if(cpu.PC == thread[i].cpu.PC && cpu.AC == thread[i].cpu.AC && cpu.IN == thread[i].cpu.IN && cpu.RI.arg == thread[i].cpu.RI.arg && cpu.RI.op == thread[i].cpu.RI.op && cpu.IO == thread[i].cpu.IO){
+            thread[i].cpu.AC=1;
+            break;
+        }
+    }
     return cpu;
 }
 
 
 PSW sysc_sleep(PSW cpu) {
-    printf("Fonction %s à terminer.\n", __FUNCTION__);
-    exit(EXIT_FAILURE);
+    int sleep_time = cpu.AC;
+    thread[current_thread].state = ASLEEP;
+    time(&wake_up_times[current_thread]);
+    wake_up_times[current_thread] += sleep_time;
+    return scheduler(cpu);
 }
 
 
 
 PSW sysc_getchar(PSW cpu) {
-    printf("Fonction %s à terminer.\n", __FUNCTION__);
-    exit(EXIT_FAILURE);
+    if (tampon == '\0') {
+        thread[current_thread].state = GETCHAR;
+        return scheduler(cpu);
+    } else {
+        cpu.AC = tampon;
+        tampon = '\0';
+        return cpu;
+    }
+}
+
+
+void keyboard_event(void) {
+    int char_thread = -1;
+    for (int i = 0; i < MAX_THREADS; i++) {
+        if (thread[i].state == GETCHAR) {
+            char_thread = i;
+            break;
+        }
+    }
+
+    if (char_thread != -1) {
+        thread[char_thread].cpu.AC = 'A';  
+        thread[char_thread].state = READY;
+    } else {
+        tampon = 'A';  
+    }
 }
 
 
@@ -189,6 +245,17 @@ static PSW system_call(PSW cpu) {
         case SYSC_PUTI:
             cpu = sysc_puti(cpu);
             break;
+        case SYSC_NEW_THREAD:
+            cpu = sysc_new_thread(cpu);
+        
+        case SYSC_SLEEP:
+            cpu = sysc_sleep(cpu);
+            break;
+
+        case SYSC_GETCHAR:
+            cpu = sysc_getchar(cpu);
+            break;
+        
         default:
             printf("Appel système inconnu %d\n", cpu.RI.arg);
             break;
@@ -214,12 +281,10 @@ PSW process_interrupt(PSW cpu) {
             dump_cpu(cpu); sleep(1);
             scheduler(cpu);
         case INT_SYSC:
-            printf("Appel système\n");
             cpu = system_call(cpu);
             break;
         case INT_KEYBOARD:
             printf("Interruption clavier\n");
-            exit(EXIT_FAILURE); 
             break;
         default:
             break;
